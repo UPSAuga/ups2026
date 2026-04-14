@@ -1,16 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // DOM Elements
-  const screens = {
-    upload: document.getElementById('screen-upload'),
-    editor: document.getElementById('screen-editor'),
-    preview: document.getElementById('screen-preview'),
-  };
-
-  const uploadForm = document.getElementById('upload-form');
+  // 🔍 STRICT DOM REFERENCES
   const inputName = document.getElementById('input-name');
   const inputPhoto = document.getElementById('input-photo');
   const btnContinue = document.getElementById('btn-continue');
+  const uploadForm = document.getElementById('upload-form');
   const fileHint = document.getElementById('file-hint');
+
+  const screenUpload = document.getElementById('screen-upload');
+  const screenEditor = document.getElementById('screen-editor');
+  const screenPreview = document.getElementById('screen-preview');
 
   const btnBack = document.getElementById('btn-back');
   const btnReset = document.getElementById('btn-reset');
@@ -26,62 +24,91 @@ document.addEventListener('DOMContentLoaded', () => {
   const previewImage = document.getElementById('preview-image');
   const loadingOverlay = document.getElementById('loading-overlay');
 
-  // State & Constants
+  // 🛡️ SAFETY CHECK
+  if (!inputName || !inputPhoto || !btnContinue || !uploadForm) {
+    console.error('❌ Critical form elements missing. Check HTML IDs.');
+    return;
+  }
+
+  // 📐 CONSTANTS
   const CANVAS_W = 2000;
   const CANVAS_H = 2250;
-  
+
+  // 🧠 STATE
   let stage, bgGroup, overlayImg, userImageNode;
   let exportedDataUrl = null;
   let loadedUserName = '';
   let exportPixelRatio = 1;
 
-  // 1️⃣ PRELOAD TEMPLATE INSTANTLY
+  // 📥 PRELOAD TEMPLATE INSTANTLY
   const templateImage = new Image();
   templateImage.crossOrigin = 'anonymous';
   templateImage.src = 'assets/template.png';
-  templateImage.onload = () => {
-    console.log('✅ Template preloaded and ready');
-  };
-  templateImage.onerror = () => {
-    console.warn('⚠️ Template failed to load. Ensure assets/template.png exists.');
-  };
+  templateImage.onload = () => console.log('✅ Template preloaded');
+  templateImage.onerror = () => console.warn('⚠️ Template failed. Ensure assets/template.png exists.');
 
-  // Screen Navigation
-  function showScreen(name) {
-    Object.values(screens).forEach(s => s.classList.remove('active'));
-    screens[name].classList.add('active');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  // ✅ FORM VALIDATION (FIXED)
+  function checkFormValidity() {
+    const nameEntered = inputName.value.trim().length > 0;
+    const fileSelected = inputPhoto.files && inputPhoto.files.length > 0;
+    const isValid = nameEntered && fileSelected;
 
-  // Form Validation
-  function validateForm() {
-    const hasName = inputName.value.trim().length > 0;
-    const hasFile = inputPhoto.files && inputPhoto.files.length > 0;
-    const isValid = hasName && hasFile;
+    // Immediately toggle button state
     btnContinue.disabled = !isValid;
     return isValid;
   }
 
-  inputName.addEventListener('input', validateForm);
-  inputPhoto.addEventListener('change', () => {
-    fileHint.textContent = inputPhoto.files[0]?.name || 'No file selected';
-    validateForm();
+  // Attach multiple events for max mobile/desktop compatibility
+  inputName.addEventListener('input', checkFormValidity);
+  inputName.addEventListener('keyup', checkFormValidity);
+  inputName.addEventListener('paste', () => setTimeout(checkFormValidity, 10));
+
+  inputPhoto.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    fileHint.textContent = file ? file.name : 'No file selected';
+    checkFormValidity();
   });
 
+  // Run once on load to set initial state
+  checkFormValidity();
+
+  // 📤 FORM SUBMISSION (FIXED)
   uploadForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-    loadedUserName = inputName.value.trim();
-    initEditor(inputPhoto.files[0]);
-    showScreen('editor');
+    e.preventDefault(); // Block native submit
+
+    if (!checkFormValidity()) {
+      alert('Please enter your name and select a photo to continue.');
+      return;
+    }
+
+    const userName = inputName.value.trim();
+    const userFile = inputPhoto.files[0];
+
+    try {
+      loadedUserName = userName;
+      initEditor(userFile);
+      showScreen('editor');
+    } catch (err) {
+      console.error('❌ Editor init failed:', err);
+      alert('Failed to start editor. Please refresh and try again.');
+    }
   });
+
+  // 🔄 SCREEN NAVIGATION
+  function showScreen(name) {
+    [screenUpload, screenEditor, screenPreview].forEach(s => s.classList.remove('active'));
+    if (name === 'upload') screenUpload.classList.add('active');
+    if (name === 'editor') screenEditor.classList.add('active');
+    if (name === 'preview') screenPreview.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   btnBack.addEventListener('click', () => {
     cleanupStage();
     showScreen('upload');
   });
 
-  // Konva Setup & Lifecycle
+  // 🎨 KONVA EDITOR INIT
   function cleanupStage() {
     if (stage) { stage.destroy(); stage = null; }
     bgGroup = null; overlayImg = null; userImageNode = null;
@@ -91,10 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
     cleanupStage();
 
     const container = document.getElementById('canvas-container');
-    const displayWidth = container.clientWidth || 400;
+    const displayWidth = container.clientWidth || window.innerWidth * 0.9;
     const displayHeight = Math.round(displayWidth * (CANVAS_H / CANVAS_W));
     
-    // Set exact container size
     container.style.height = `${displayHeight}px`;
     exportPixelRatio = CANVAS_W / displayWidth;
 
@@ -104,14 +130,14 @@ document.addEventListener('DOMContentLoaded', () => {
       height: displayHeight,
     });
 
-    // 2️⃣ USER IMAGE LAYER (CLIPPED TO CANVAS BOUNDS)
+    // Clipped group for user image
     bgGroup = new Konva.Group({
       clip: { x: 0, y: 0, width: displayWidth, height: displayHeight },
       listening: true
     });
     stage.add(bgGroup);
 
-    // 3️⃣ TEMPLATE OVERLAY (FIXED ON TOP)
+    // Fixed template overlay
     overlayImg = new Konva.Image({
       image: templateImage,
       x: 0, y: 0,
@@ -122,12 +148,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     stage.add(overlayImg);
 
-    // Load & Position User Image
+    // Load user image
     const img = new Image();
     img.onload = () => {
       const scaleX = displayWidth / img.width;
       const scaleY = displayHeight / img.height;
-      const baseScale = Math.min(scaleX, scaleY) * 1.15; // slight bleed for dragging
+      const baseScale = Math.min(scaleX, scaleY) * 1.15;
 
       userImageNode = new Konva.Image({
         image: img,
@@ -144,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
       bgGroup.batchDraw();
       stage.draw();
 
-      // Store defaults for reset
+      // Store defaults
       userImageNode._defaults = {
         x: displayWidth / 2,
         y: displayHeight / 2,
@@ -158,9 +184,10 @@ document.addEventListener('DOMContentLoaded', () => {
       rotateSlider.value = 0;
       updateSliderLabels();
     };
+    img.onerror = () => alert('Invalid image file. Please upload a JPG or PNG.');
     img.src = URL.createObjectURL(file);
 
-    // Draw template immediately if already loaded
+    // Force immediate template render if cached
     if (templateImage.complete && templateImage.naturalWidth > 0) {
       overlayImg.image(templateImage);
       stage.draw();
@@ -169,13 +196,13 @@ document.addEventListener('DOMContentLoaded', () => {
     bindControls();
   }
 
+  // 🎛️ CONTROLS
   function bindControls() {
     zoomSlider.oninput = () => {
       if (!userImageNode) return;
       const factor = parseFloat(zoomSlider.value);
       const base = userImageNode._defaults.scaleX;
-      const newScale = base * factor;
-      userImageNode.scale({ x: newScale, y: newScale });
+      userImageNode.scale({ x: base * factor, y: base * factor });
       bgGroup.batchDraw();
       updateSliderLabels();
     };
@@ -207,13 +234,13 @@ document.addEventListener('DOMContentLoaded', () => {
     rotateVal.textContent = `${rotateSlider.value}°`;
   }
 
+  // 📤 EXPORT & DOWNLOAD
   function generatePreview() {
-    if (!stage) return;
+    if (!stage || !userImageNode) return;
     loadingOverlay.classList.remove('hidden');
 
     setTimeout(() => {
       try {
-        // Export at exact 2000x2250
         exportedDataUrl = stage.toDataURL({
           width: CANVAS_W,
           height: CANVAS_H,
@@ -227,10 +254,10 @@ document.addEventListener('DOMContentLoaded', () => {
         showScreen('preview');
       } catch (err) {
         console.error('Export failed:', err);
-        alert('Could not generate preview. Please try again.');
+        alert('Generation failed. Please try again.');
         loadingOverlay.classList.add('hidden');
       }
-    }, 200);
+    }, 150);
   }
 
   btnDownload.onclick = () => {
@@ -244,7 +271,4 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   btnEditAgain.onclick = () => showScreen('editor');
-
-  // Init
-  showScreen('upload');
 });
