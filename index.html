@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UPS 2026 – Poster Generator</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/konva@9/konva.min.js"></script>
+</head>
+<body>
+  <!-- Upload Screen -->
+  <section id="screen-upload" class="screen active">
+    <div class="container">
+      <div class="logo-wrapper">
+        <img src="assets/event-logo.png" alt="UPS 2026 Logo" class="event-logo" />
+      </div>
+      <h1>Poster Generator</h1>
+      <p class="subtitle">6th Uganda Pharmaceutical Symposium 2026</p>
+
+      <form id="upload-form" autocomplete="off">
+        <div class="form-group">
+          <label for="input-name">Your Name</label>
+          <input type="text" id="input-name" placeholder="e.g. Dr. Jane K." required />
+        </div>
+
+        <div class="form-group">
+          <label for="input-photo">Your Photo</label>
+          <label class="upload-btn" for="input-photo">
+            📷 Choose Photo
+          </label>
+          <input type="file" id="input-photo" accept="image/*" required />
+          <p class="file-hint" id="file-hint">No file chosen</p>
+        </div>
+
+        <button type="submit" id="btn-continue" disabled>Continue</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Editor Screen -->
+  <section id="screen-editor" class="screen">
+    <div class="editor-header">
+      <button id="btn-back" class="icon-btn">← Back</button>
+      <span class="editor-title">Adjust Your Poster</span>
+    </div>
+
+    <div class="canvas-container" id="canvas-container">
+      <div id="konva-stage"></div>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="zoom-slider">Zoom</label>
+        <input type="range" id="zoom-slider" min="0.5" max="3" step="0.01" value="1" />
+      </div>
+
+      <div class="control-group">
+        <label for="rotate-slider">Rotate</label>
+        <input type="range" id="rotate-slider" min="-45" max="45" step="1" value="0" />
+      </div>
+
+      <button id="btn-reset" class="secondary-btn">Reset</button>
+      <button id="btn-preview" class="primary-btn">Preview Poster</button>
+    </div>
+  </section>
+
+  <!-- Preview Screen -->
+  <section id="screen-preview" class="screen">
+    <div class="preview-header">
+      <button id="btn-edit-again" class="icon-btn">← Edit Again</button>
+      <span class="editor-title">Your Poster is Ready</span>
+    </div>
+
+    <div class="preview-container">
+      <img id="preview-image" alt="Generated Poster" />
+    </div>
+
+    <div class="preview-actions">
+      <button id="btn-download" class="primary-btn">⬇ Download Poster</button>
+    </div>
+  </section>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p>Generating your poster…</p>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
