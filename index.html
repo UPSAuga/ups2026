@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>UPS 2026 – Poster Generator</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://unpkg.com/konva@9/konva.min.js"></script>
 </head>
 <body>
+
   <!-- Upload Screen -->
   <section id="screen-upload" class="screen active">
     <div class="container">
@@ -20,16 +21,14 @@
       <form id="upload-form" autocomplete="off">
         <div class="form-group">
           <label for="input-name">Your Name</label>
-          <input type="text" id="input-name" placeholder="e.g. Dr. Jane K." required />
+          <input type="text" id="input-name" placeholder="e.g. Dr. Jane K." autocomplete="off" />
         </div>
 
         <div class="form-group">
           <label for="input-photo">Your Photo</label>
-          <label class="upload-btn" for="input-photo">
-            📷 Choose Photo
-          </label>
-          <input type="file" id="input-photo" accept="image/*" required />
-          <p class="file-hint" id="file-hint">No file chosen</p>
+          <label class="upload-btn" for="input-photo">📷 Choose Photo</label>
+          <input type="file" id="input-photo" accept="image/*" />
+          <p class="file-hint" id="file-hint">No file selected</p>
         </div>
 
         <button type="submit" id="btn-continue" disabled>Continue</button>
@@ -50,12 +49,12 @@
 
     <div class="controls">
       <div class="control-group">
-        <label for="zoom-slider">Zoom</label>
-        <input type="range" id="zoom-slider" min="0.5" max="3" step="0.01" value="1" />
+        <label for="zoom-slider">Zoom: <span id="zoom-val">1.0x</span></label>
+        <input type="range" id="zoom-slider" min="0.5" max="2.0" step="0.05" value="1" />
       </div>
 
       <div class="control-group">
-        <label for="rotate-slider">Rotate</label>
+        <label for="rotate-slider">Rotate: <span id="rotate-val">0°</span></label>
         <input type="range" id="rotate-slider" min="-45" max="45" step="1" value="0" />
       </div>
 
