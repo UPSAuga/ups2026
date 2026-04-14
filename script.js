@@ -26,11 +26,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const previewImage = document.getElementById('preview-image');
   const loadingOverlay = document.getElementById('loading-overlay');
 
-  // State
-  let stage, bgLayer, overlayLayer, userImageNode;
+  // State & Constants
+  const CANVAS_W = 2000;
+  const CANVAS_H = 2250;
+  
+  let stage, bgGroup, overlayImg, userImageNode;
   let exportedDataUrl = null;
   let loadedUserName = '';
   let exportPixelRatio = 1;
+
+  // 1️⃣ PRELOAD TEMPLATE INSTANTLY
+  const templateImage = new Image();
+  templateImage.crossOrigin = 'anonymous';
+  templateImage.src = 'assets/template.png';
+  templateImage.onload = () => {
+    console.log('✅ Template preloaded and ready');
+  };
+  templateImage.onerror = () => {
+    console.warn('⚠️ Template failed to load. Ensure assets/template.png exists.');
+  };
 
   // Screen Navigation
   function showScreen(name) {
@@ -67,10 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
     showScreen('upload');
   });
 
-  // Konva Setup
+  // Konva Setup & Lifecycle
   function cleanupStage() {
     if (stage) { stage.destroy(); stage = null; }
-    bgLayer = null; overlayLayer = null; userImageNode = null;
+    bgGroup = null; overlayImg = null; userImageNode = null;
   }
 
   function initEditor(file) {
@@ -78,9 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const container = document.getElementById('canvas-container');
     const displayWidth = container.clientWidth || 400;
-    const displayHeight = displayWidth * (2250 / 2000);
+    const displayHeight = Math.round(displayWidth * (CANVAS_H / CANVAS_W));
+    
+    // Set exact container size
     container.style.height = `${displayHeight}px`;
-    exportPixelRatio = 2000 / displayWidth;
+    exportPixelRatio = CANVAS_W / displayWidth;
 
     stage = new Konva.Stage({
       container: 'konva-stage',
@@ -88,28 +104,35 @@ document.addEventListener('DOMContentLoaded', () => {
       height: displayHeight,
     });
 
-    bgLayer = new Konva.Layer();
-    overlayLayer = new Konva.Layer();
-    stage.add(bgLayer);
-    stage.add(overlayLayer);
+    // 2️⃣ USER IMAGE LAYER (CLIPPED TO CANVAS BOUNDS)
+    bgGroup = new Konva.Group({
+      clip: { x: 0, y: 0, width: displayWidth, height: displayHeight },
+      listening: true
+    });
+    stage.add(bgGroup);
 
-    loadImage(file);
-    loadTemplate();
-    bindControls();
-  }
+    // 3️⃣ TEMPLATE OVERLAY (FIXED ON TOP)
+    overlayImg = new Konva.Image({
+      image: templateImage,
+      x: 0, y: 0,
+      width: displayWidth,
+      height: displayHeight,
+      listening: false,
+      draggable: false
+    });
+    stage.add(overlayImg);
 
-  function loadImage(file) {
+    // Load & Position User Image
     const img = new Image();
     img.onload = () => {
-      // Calculate scale to cover the canvas
-      const scaleX = stage.width() / img.width;
-      const scaleY = stage.height() / img.height;
-      const baseScale = Math.max(scaleX, scaleY) * 1.15; // slight bleed for dragging
+      const scaleX = displayWidth / img.width;
+      const scaleY = displayHeight / img.height;
+      const baseScale = Math.min(scaleX, scaleY) * 1.15; // slight bleed for dragging
 
       userImageNode = new Konva.Image({
         image: img,
-        x: stage.width() / 2,
-        y: stage.height() / 2,
+        x: displayWidth / 2,
+        y: displayHeight / 2,
         offsetX: img.width / 2,
         offsetY: img.height / 2,
         scaleX: baseScale,
@@ -117,43 +140,33 @@ document.addEventListener('DOMContentLoaded', () => {
         draggable: true,
       });
 
-      bgLayer.add(userImageNode);
-      bgLayer.batchDraw();
+      bgGroup.add(userImageNode);
+      bgGroup.batchDraw();
+      stage.draw();
 
       // Store defaults for reset
       userImageNode._defaults = {
-        x: stage.width() / 2,
-        y: stage.height() / 2,
+        x: displayWidth / 2,
+        y: displayHeight / 2,
         scaleX: baseScale,
         scaleY: baseScale,
         rotation: 0
       };
 
-      // Reset sliders to default state
+      // Reset sliders
       zoomSlider.value = 1;
       rotateSlider.value = 0;
       updateSliderLabels();
     };
     img.src = URL.createObjectURL(file);
-  }
 
-  function loadTemplate() {
-    const tpl = new Image();
-    tpl.onload = () => {
-      const tplImg = new Konva.Image({
-        image: tpl,
-        x: 0, y: 0,
-        width: stage.width(),
-        height: stage.height(),
-        listening: false
-      });
-      overlayLayer.add(tplImg);
-      overlayLayer.batchDraw();
-    };
-    tpl.onerror = () => {
-      console.warn('Template failed to load. Make sure assets/template.png exists.');
-    };
-    tpl.src = 'assets/template.png';
+    // Draw template immediately if already loaded
+    if (templateImage.complete && templateImage.naturalWidth > 0) {
+      overlayImg.image(templateImage);
+      stage.draw();
+    }
+
+    bindControls();
   }
 
   function bindControls() {
@@ -163,14 +176,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const base = userImageNode._defaults.scaleX;
       const newScale = base * factor;
       userImageNode.scale({ x: newScale, y: newScale });
-      bgLayer.batchDraw();
+      bgGroup.batchDraw();
       updateSliderLabels();
     };
 
     rotateSlider.oninput = () => {
       if (!userImageNode) return;
       userImageNode.rotation(parseFloat(rotateSlider.value));
-      bgLayer.batchDraw();
+      bgGroup.batchDraw();
       updateSliderLabels();
     };
 
@@ -183,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
       zoomSlider.value = 1;
       rotateSlider.value = 0;
       updateSliderLabels();
-      bgLayer.batchDraw();
+      bgGroup.batchDraw();
     };
 
     btnPreview.onclick = generatePreview;
@@ -198,14 +211,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!stage) return;
     loadingOverlay.classList.remove('hidden');
 
-    // Allow UI to render spinner
     setTimeout(() => {
       try {
+        // Export at exact 2000x2250
         exportedDataUrl = stage.toDataURL({
-          width: 2000,
-          height: 2250,
+          width: CANVAS_W,
+          height: CANVAS_H,
           mimeType: 'image/png',
-          pixelRatio: exportPixelRatio
+          pixelRatio: exportPixelRatio,
+          imageSmoothingEnabled: true,
+          imageSmoothingQuality: 'high'
         });
         previewImage.src = exportedDataUrl;
         loadingOverlay.classList.add('hidden');
@@ -228,7 +243,8 @@ document.addEventListener('DOMContentLoaded', () => {
     link.remove();
   };
 
-  btnEditAgain.onclick = () => {
-    showScreen('editor');
-  };
+  btnEditAgain.onclick = () => showScreen('editor');
+
+  // Init
+  showScreen('upload');
 });
