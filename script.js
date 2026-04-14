@@ -1,245 +1,234 @@
-// ============ DOM REFS ============
-const screens = {
-  upload: document.getElementById("screen-upload"),
-  editor: document.getElementById("screen-editor"),
-  preview: document.getElementById("screen-preview"),
-};
+document.addEventListener('DOMContentLoaded', () => {
+  // DOM Elements
+  const screens = {
+    upload: document.getElementById('screen-upload'),
+    editor: document.getElementById('screen-editor'),
+    preview: document.getElementById('screen-preview'),
+  };
 
-const uploadForm = document.getElementById("upload-form");
-const inputName = document.getElementById("input-name");
-const inputPhoto = document.getElementById("input-photo");
-const btnContinue = document.getElementById("btn-continue");
-const fileHint = document.getElementById("file-hint");
+  const uploadForm = document.getElementById('upload-form');
+  const inputName = document.getElementById('input-name');
+  const inputPhoto = document.getElementById('input-photo');
+  const btnContinue = document.getElementById('btn-continue');
+  const fileHint = document.getElementById('file-hint');
 
-const btnBack = document.getElementById("btn-back");
-const btnReset = document.getElementById("btn-reset");
-const btnPreview = document.getElementById("btn-preview");
-const btnEditAgain = document.getElementById("btn-edit-again");
-const btnDownload = document.getElementById("btn-download");
+  const btnBack = document.getElementById('btn-back');
+  const btnReset = document.getElementById('btn-reset');
+  const btnPreview = document.getElementById('btn-preview');
+  const btnEditAgain = document.getElementById('btn-edit-again');
+  const btnDownload = document.getElementById('btn-download');
 
-const zoomSlider = document.getElementById("zoom-slider");
-const rotateSlider = document.getElementById("rotate-slider");
+  const zoomSlider = document.getElementById('zoom-slider');
+  const rotateSlider = document.getElementById('rotate-slider');
+  const zoomVal = document.getElementById('zoom-val');
+  const rotateVal = document.getElementById('rotate-val');
 
-const previewImage = document.getElementById("preview-image");
-const loadingOverlay = document.getElementById("loading-overlay");
+  const previewImage = document.getElementById('preview-image');
+  const loadingOverlay = document.getElementById('loading-overlay');
 
-// ============ STATE ============
-const CANVAS_W = 2000;
-const CANVAS_H = 2250;
+  // State
+  let stage, bgLayer, overlayLayer, userImageNode;
+  let exportedDataUrl = null;
+  let loadedUserName = '';
+  let exportPixelRatio = 1;
 
-let stage, bgLayer, overlayLayer, userImageNode;
-let exportedBlob = null;
-let loadedUserName = "";
+  // Screen Navigation
+  function showScreen(name) {
+    Object.values(screens).forEach(s => s.classList.remove('active'));
+    screens[name].classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
-// ============ SCREEN SWITCHING ============
-function showScreen(name) {
-  Object.values(screens).forEach((s) => s.classList.remove("active"));
-  screens[name].classList.add("active");
-  window.scrollTo(0, 0);
-}
+  // Form Validation
+  function validateForm() {
+    const hasName = inputName.value.trim().length > 0;
+    const hasFile = inputPhoto.files && inputPhoto.files.length > 0;
+    const isValid = hasName && hasFile;
+    btnContinue.disabled = !isValid;
+    return isValid;
+  }
 
-// ============ UPLOAD FORM ============
-function validateForm() {
-  btnContinue.disabled = !(inputName.value.trim() && inputPhoto.files.length);
-}
-
-inputName.addEventListener("input", validateForm);
-inputPhoto.addEventListener("change", () => {
-  const file = inputPhoto.files[0];
-  fileHint.textContent = file ? file.name : "No file chosen";
-  validateForm();
-});
-
-uploadForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  if (!validateForm()) return;
-  loadedUserName = inputName.value.trim();
-  initEditor(inputPhoto.files[0]);
-  showScreen("editor");
-});
-
-// ============ BACK BUTTON ============
-btnBack.addEventListener("click", () => {
-  destroyStage();
-  showScreen("upload");
-});
-
-// ============ KONVA STAGE ============
-function initStage() {
-  stage = new Konva.Stage({
-    container: "konva-stage",
-    width: CANVAS_W,
-    height: CANVAS_H,
+  inputName.addEventListener('input', validateForm);
+  inputPhoto.addEventListener('change', () => {
+    fileHint.textContent = inputPhoto.files[0]?.name || 'No file selected';
+    validateForm();
   });
 
-  bgLayer = new Konva.Layer();
-  overlayLayer = new Konva.Layer();
+  uploadForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    loadedUserName = inputName.value.trim();
+    initEditor(inputPhoto.files[0]);
+    showScreen('editor');
+  });
 
-  stage.add(bgLayer);
-  stage.add(overlayLayer);
-}
+  btnBack.addEventListener('click', () => {
+    cleanupStage();
+    showScreen('upload');
+  });
 
-function destroyStage() {
-  if (stage) {
-    stage.destroy();
-    stage = null;
-    bgLayer = null;
-    overlayLayer = null;
-    userImageNode = null;
+  // Konva Setup
+  function cleanupStage() {
+    if (stage) { stage.destroy(); stage = null; }
+    bgLayer = null; overlayLayer = null; userImageNode = null;
   }
-}
 
-// ============ EDITOR INIT ============
-function initEditor(file) {
-  destroyStage();
-  initStage();
+  function initEditor(file) {
+    cleanupStage();
 
-  const img = new Image();
-  img.onload = () => {
-    drawUserImage(img);
+    const container = document.getElementById('canvas-container');
+    const displayWidth = container.clientWidth || 400;
+    const displayHeight = displayWidth * (2250 / 2000);
+    container.style.height = `${displayHeight}px`;
+    exportPixelRatio = 2000 / displayWidth;
+
+    stage = new Konva.Stage({
+      container: 'konva-stage',
+      width: displayWidth,
+      height: displayHeight,
+    });
+
+    bgLayer = new Konva.Layer();
+    overlayLayer = new Konva.Layer();
+    stage.add(bgLayer);
+    stage.add(overlayLayer);
+
+    loadImage(file);
     loadTemplate();
     bindControls();
-  };
-  img.src = URL.createObjectURL(file);
-}
+  }
 
-function drawUserImage(img) {
-  // Calculate initial scale to cover the canvas
-  const scaleX = CANVAS_W / img.width;
-  const scaleY = CANVAS_H / img.height;
-  const initialScale = Math.min(scaleX, scaleY) * 1.15; // slight bleed
+  function loadImage(file) {
+    const img = new Image();
+    img.onload = () => {
+      // Calculate scale to cover the canvas
+      const scaleX = stage.width() / img.width;
+      const scaleY = stage.height() / img.height;
+      const baseScale = Math.max(scaleX, scaleY) * 1.15; // slight bleed for dragging
 
-  userImageNode = new Konva.Image({
-    image: img,
-    x: CANVAS_W / 2,
-    y: CANVAS_H / 2,
-    offsetX: img.width / 2,
-    offsetY: img.height / 2,
-    scaleX: initialScale,
-    scaleY: initialScale,
-    draggable: true,
-    listening: true,
-  });
-
-  bgLayer.add(userImageNode);
-  bgLayer.batchDraw();
-
-  // Store defaults for reset
-  userImageNode._defaults = {
-    x: CANVAS_W / 2,
-    y: CANVAS_H / 2,
-    scaleX: initialScale,
-    scaleY: initialScale,
-    rotation: 0,
-  };
-
-  // Sync sliders
-  zoomSlider.value = initialScale.toFixed(2);
-  rotateSlider.value = 0;
-  zoomSlider.min = (initialScale * 0.4).toFixed(2);
-  zoomSlider.max = (initialScale * 2.8).toFixed(2);
-}
-
-function loadTemplate() {
-  const tpl = new Image();
-  tpl.onload = () => {
-    const tplImg = new Konva.Image({
-      image: tpl,
-      x: 0,
-      y: 0,
-      width: CANVAS_W,
-      height: CANVAS_H,
-      listening: false,
-    });
-    overlayLayer.add(tplImg);
-    overlayLayer.batchDraw();
-  };
-  tpl.onerror = () => {
-    console.warn("Template image not found at assets/template.png");
-  };
-  tpl.src = "assets/template.png";
-}
-
-// ============ CONTROLS ============
-function bindControls() {
-  zoomSlider.oninput = () => {
-    if (!userImageNode) return;
-    const val = parseFloat(zoomSlider.value);
-    userImageNode.scaleX(val);
-    userImageNode.scaleY(val);
-    bgLayer.batchDraw();
-  };
-
-  rotateSlider.oninput = () => {
-    if (!userImageNode) return;
-    userImageNode.rotation(parseFloat(rotateSlider.value));
-    bgLayer.batchDraw();
-  };
-
-  btnReset.onclick = () => {
-    if (!userImageNode) return;
-    const d = userImageNode._defaults;
-    userImageNode.position({ x: d.x, y: d.y });
-    userImageNode.scaleX(d.scaleX);
-    userImageNode.scaleY(d.scaleY);
-    userImageNode.rotation(d.rotation);
-    zoomSlider.value = d.scaleX.toFixed(2);
-    rotateSlider.value = d.rotation;
-    bgLayer.batchDraw();
-  };
-
-  btnPreview.onclick = () => {
-    generatePreview();
-  };
-}
-
-// ============ EXPORT ============
-function generatePreview() {
-  loadingOverlay.classList.remove("hidden");
-
-  // Small delay so spinner renders
-  setTimeout(() => {
-    try {
-      const dataURL = stage.toDataURL({
-        width: CANVAS_W,
-        height: CANVAS_H,
-        mimeType: "image/png",
-        pixelRatio: 1,
+      userImageNode = new Konva.Image({
+        image: img,
+        x: stage.width() / 2,
+        y: stage.height() / 2,
+        offsetX: img.width / 2,
+        offsetY: img.height / 2,
+        scaleX: baseScale,
+        scaleY: baseScale,
+        draggable: true,
       });
 
-      previewImage.src = dataURL;
-      exportedBlob = dataURL;
+      bgLayer.add(userImageNode);
+      bgLayer.batchDraw();
 
-      // Convert base64 to blob for download
-      fetch(dataURL)
-        .then((r) => r.blob())
-        .then((blob) => {
-          exportedBlob = blob;
+      // Store defaults for reset
+      userImageNode._defaults = {
+        x: stage.width() / 2,
+        y: stage.height() / 2,
+        scaleX: baseScale,
+        scaleY: baseScale,
+        rotation: 0
+      };
+
+      // Reset sliders to default state
+      zoomSlider.value = 1;
+      rotateSlider.value = 0;
+      updateSliderLabels();
+    };
+    img.src = URL.createObjectURL(file);
+  }
+
+  function loadTemplate() {
+    const tpl = new Image();
+    tpl.onload = () => {
+      const tplImg = new Konva.Image({
+        image: tpl,
+        x: 0, y: 0,
+        width: stage.width(),
+        height: stage.height(),
+        listening: false
+      });
+      overlayLayer.add(tplImg);
+      overlayLayer.batchDraw();
+    };
+    tpl.onerror = () => {
+      console.warn('Template failed to load. Make sure assets/template.png exists.');
+    };
+    tpl.src = 'assets/template.png';
+  }
+
+  function bindControls() {
+    zoomSlider.oninput = () => {
+      if (!userImageNode) return;
+      const factor = parseFloat(zoomSlider.value);
+      const base = userImageNode._defaults.scaleX;
+      const newScale = base * factor;
+      userImageNode.scale({ x: newScale, y: newScale });
+      bgLayer.batchDraw();
+      updateSliderLabels();
+    };
+
+    rotateSlider.oninput = () => {
+      if (!userImageNode) return;
+      userImageNode.rotation(parseFloat(rotateSlider.value));
+      bgLayer.batchDraw();
+      updateSliderLabels();
+    };
+
+    btnReset.onclick = () => {
+      if (!userImageNode) return;
+      const d = userImageNode._defaults;
+      userImageNode.position({ x: d.x, y: d.y });
+      userImageNode.scale({ x: d.scaleX, y: d.scaleY });
+      userImageNode.rotation(d.rotation);
+      zoomSlider.value = 1;
+      rotateSlider.value = 0;
+      updateSliderLabels();
+      bgLayer.batchDraw();
+    };
+
+    btnPreview.onclick = generatePreview;
+  }
+
+  function updateSliderLabels() {
+    zoomVal.textContent = `${parseFloat(zoomSlider.value).toFixed(2)}x`;
+    rotateVal.textContent = `${rotateSlider.value}°`;
+  }
+
+  function generatePreview() {
+    if (!stage) return;
+    loadingOverlay.classList.remove('hidden');
+
+    // Allow UI to render spinner
+    setTimeout(() => {
+      try {
+        exportedDataUrl = stage.toDataURL({
+          width: 2000,
+          height: 2250,
+          mimeType: 'image/png',
+          pixelRatio: exportPixelRatio
         });
-    } catch (err) {
-      console.error("Export failed:", err);
-      alert("Something went wrong during export. Please try again.");
-    }
+        previewImage.src = exportedDataUrl;
+        loadingOverlay.classList.add('hidden');
+        showScreen('preview');
+      } catch (err) {
+        console.error('Export failed:', err);
+        alert('Could not generate preview. Please try again.');
+        loadingOverlay.classList.add('hidden');
+      }
+    }, 200);
+  }
 
-    loadingOverlay.classList.add("hidden");
-    showScreen("preview");
-  }, 400);
-}
+  btnDownload.onclick = () => {
+    if (!exportedDataUrl) return;
+    const link = document.createElement('a');
+    link.download = `${loadedUserName.replace(/[^a-zA-Z0-9]/g, '_')}_UPS2026.png`;
+    link.href = exportedDataUrl;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
 
-// ============ DOWNLOAD ============
-btnDownload.onclick = () => {
-  if (!exportedBlob) return;
-
-  const link = document.createElement("a");
-  link.download = `${loadedUserName.replace(/\s+/g, "_")}_UPS2026.png`;
-  link.href = exportedBlob;
-  link.click();
-};
-
-// ============ EDIT AGAIN ============
-btnEditAgain.onclick = () => {
-  showScreen("editor");
-};
-
-// ============ INIT ============
-showScreen("upload");
+  btnEditAgain.onclick = () => {
+    showScreen('editor');
+  };
+});
