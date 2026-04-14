@@ -47,13 +47,13 @@ document.addEventListener('DOMContentLoaded', () => {
   templateImage.onload = () => console.log('✅ Template preloaded');
   templateImage.onerror = () => console.warn('⚠️ Template failed. Ensure assets/template.png exists.');
 
-  // ✅ FORM VALIDATION (FIXED)
+  // ✅ FORM VALIDATION (FIXED & ROBUST)
   function checkFormValidity() {
     const nameEntered = inputName.value.trim().length > 0;
     const fileSelected = inputPhoto.files && inputPhoto.files.length > 0;
     const isValid = nameEntered && fileSelected;
 
-    // Immediately toggle button state
+    // Toggle button state immediately
     btnContinue.disabled = !isValid;
     return isValid;
   }
@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 📤 FORM SUBMISSION (FIXED)
   uploadForm.addEventListener('submit', (e) => {
-    e.preventDefault(); // Block native submit
+    e.preventDefault(); // Block native form submit
 
     if (!checkFormValidity()) {
       alert('Please enter your name and select a photo to continue.');
@@ -130,14 +130,14 @@ document.addEventListener('DOMContentLoaded', () => {
       height: displayHeight,
     });
 
-    // Clipped group for user image
+    // Clipped group for user image (acts as the "window")
     bgGroup = new Konva.Group({
       clip: { x: 0, y: 0, width: displayWidth, height: displayHeight },
       listening: true
     });
     stage.add(bgGroup);
 
-    // Fixed template overlay
+    // Fixed template overlay (always on top)
     overlayImg = new Konva.Image({
       image: templateImage,
       x: 0, y: 0,
@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
     img.onload = () => {
       const scaleX = displayWidth / img.width;
       const scaleY = displayHeight / img.height;
-      const baseScale = Math.min(scaleX, scaleY) * 1.15;
+      const baseScale = Math.min(scaleX, scaleY) * 1.15; // slight bleed for dragging
 
       userImageNode = new Konva.Image({
         image: img,
@@ -170,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
       bgGroup.batchDraw();
       stage.draw();
 
-      // Store defaults
+      // Store defaults for reset
       userImageNode._defaults = {
         x: displayWidth / 2,
         y: displayHeight / 2,
@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
     img.onerror = () => alert('Invalid image file. Please upload a JPG or PNG.');
     img.src = URL.createObjectURL(file);
 
-    // Force immediate template render if cached
+    // Force immediate template render if already cached
     if (templateImage.complete && templateImage.naturalWidth > 0) {
       overlayImg.image(templateImage);
       stage.draw();
@@ -241,13 +241,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setTimeout(() => {
       try {
+        // Export at exact 2000x2250 resolution
         exportedDataUrl = stage.toDataURL({
           width: CANVAS_W,
           height: CANVAS_H,
           mimeType: 'image/png',
-          pixelRatio: exportPixelRatio,
-          imageSmoothingEnabled: true,
-          imageSmoothingQuality: 'high'
+          pixelRatio: 1
         });
         previewImage.src = exportedDataUrl;
         loadingOverlay.classList.add('hidden');
