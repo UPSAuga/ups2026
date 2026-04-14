@@ -1,4 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
+  if (typeof Konva === 'undefined') {
+    console.error('❌ Konva.js failed to load. Check your internet connection.');
+    document.body.innerHTML = '<h2 style="padding:20px;text-align:center;">Failed to load editor library.</h2>';
+    return;
+  }
+
   // 🔍 STRICT DOM REFERENCES
   const inputName = document.getElementById('input-name');
   const inputPhoto = document.getElementById('input-photo');
@@ -24,12 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const previewImage = document.getElementById('preview-image');
   const loadingOverlay = document.getElementById('loading-overlay');
 
-  // 🛡️ SAFETY CHECK
-  if (!inputName || !inputPhoto || !btnContinue || !uploadForm) {
-    console.error('❌ Critical form elements missing. Check HTML IDs.');
-    return;
-  }
-
   // 📐 CONSTANTS
   const CANVAS_W = 2000;
   const CANVAS_H = 2250;
@@ -44,21 +44,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const templateImage = new Image();
   templateImage.crossOrigin = 'anonymous';
   templateImage.src = 'assets/template.png';
-  templateImage.onload = () => console.log('✅ Template preloaded');
-  templateImage.onerror = () => console.warn('⚠️ Template failed. Ensure assets/template.png exists.');
+  templateImage.onload = () => console.log('✅ Template preloaded & ready');
+  templateImage.onerror = () => console.warn('⚠️ Template failed to load. Ensure assets/template.png exists.');
 
-  // ✅ FORM VALIDATION (FIXED & ROBUST)
+  // ✅ ROBUST FORM VALIDATION
   function checkFormValidity() {
     const nameEntered = inputName.value.trim().length > 0;
     const fileSelected = inputPhoto.files && inputPhoto.files.length > 0;
     const isValid = nameEntered && fileSelected;
 
-    // Toggle button state immediately
     btnContinue.disabled = !isValid;
     return isValid;
   }
 
-  // Attach multiple events for max mobile/desktop compatibility
   inputName.addEventListener('input', checkFormValidity);
   inputName.addEventListener('keyup', checkFormValidity);
   inputName.addEventListener('paste', () => setTimeout(checkFormValidity, 10));
@@ -69,29 +67,34 @@ document.addEventListener('DOMContentLoaded', () => {
     checkFormValidity();
   });
 
-  // Run once on load to set initial state
+  // Initialize button state on load
   checkFormValidity();
 
-  // 📤 FORM SUBMISSION (FIXED)
+  // 📤 FORM SUBMISSION (FIXED ORDER & TIMING)
   uploadForm.addEventListener('submit', (e) => {
-    e.preventDefault(); // Block native form submit
+    e.preventDefault();
 
     if (!checkFormValidity()) {
       alert('Please enter your name and select a photo to continue.');
       return;
     }
 
-    const userName = inputName.value.trim();
+    loadedUserName = inputName.value.trim();
     const userFile = inputPhoto.files[0];
 
-    try {
-      loadedUserName = userName;
-      initEditor(userFile);
-      showScreen('editor');
-    } catch (err) {
-      console.error('❌ Editor init failed:', err);
-      alert('Failed to start editor. Please refresh and try again.');
-    }
+    // 1️⃣ Show screen FIRST so browser calculates layout
+    showScreen('editor');
+
+    // 2️⃣ Wait for next paint to guarantee non-zero container dimensions
+    requestAnimationFrame(() => {
+      try {
+        initEditor(userFile);
+      } catch (err) {
+        console.error('❌ Editor initialization failed:', err);
+        alert('Failed to load editor: ' + err.message);
+        showScreen('upload');
+      }
+    });
   });
 
   // 🔄 SCREEN NAVIGATION
@@ -108,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showScreen('upload');
   });
 
-  // 🎨 KONVA EDITOR INIT
+  // 🎨 KONVA EDITOR INITIALIZATION
   function cleanupStage() {
     if (stage) { stage.destroy(); stage = null; }
     bgGroup = null; overlayImg = null; userImageNode = null;
@@ -118,11 +121,13 @@ document.addEventListener('DOMContentLoaded', () => {
     cleanupStage();
 
     const container = document.getElementById('canvas-container');
-    const displayWidth = container.clientWidth || window.innerWidth * 0.9;
+    
+    // 🛡️ FALLBACK: Prevents 0-width crash if container isn't fully painted
+    let displayWidth = container.clientWidth || Math.min(window.innerWidth - 32, 480);
     const displayHeight = Math.round(displayWidth * (CANVAS_H / CANVAS_W));
     
     container.style.height = `${displayHeight}px`;
-    exportPixelRatio = CANVAS_W / displayWidth;
+    exportPixelRatio = CANVAS_W / displayWidth || 4; // Safe fallback
 
     stage = new Konva.Stage({
       container: 'konva-stage',
@@ -130,14 +135,14 @@ document.addEventListener('DOMContentLoaded', () => {
       height: displayHeight,
     });
 
-    // Clipped group for user image (acts as the "window")
+    // Clipped group for user image
     bgGroup = new Konva.Group({
       clip: { x: 0, y: 0, width: displayWidth, height: displayHeight },
       listening: true
     });
     stage.add(bgGroup);
 
-    // Fixed template overlay (always on top)
+    // Fixed template overlay
     overlayImg = new Konva.Image({
       image: templateImage,
       x: 0, y: 0,
@@ -153,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
     img.onload = () => {
       const scaleX = displayWidth / img.width;
       const scaleY = displayHeight / img.height;
-      const baseScale = Math.min(scaleX, scaleY) * 1.15; // slight bleed for dragging
+      const baseScale = Math.min(scaleX, scaleY) * 1.15; // Slight bleed for safe dragging
 
       userImageNode = new Konva.Image({
         image: img,
@@ -179,15 +184,14 @@ document.addEventListener('DOMContentLoaded', () => {
         rotation: 0
       };
 
-      // Reset sliders
       zoomSlider.value = 1;
       rotateSlider.value = 0;
       updateSliderLabels();
     };
-    img.onerror = () => alert('Invalid image file. Please upload a JPG or PNG.');
+    img.onerror = () => alert('Invalid image format. Please use JPG or PNG.');
     img.src = URL.createObjectURL(file);
 
-    // Force immediate template render if already cached
+    // Immediate template draw if cached
     if (templateImage.complete && templateImage.naturalWidth > 0) {
       overlayImg.image(templateImage);
       stage.draw();
@@ -241,19 +245,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setTimeout(() => {
       try {
-        // Export at exact 2000x2250 resolution
         exportedDataUrl = stage.toDataURL({
           width: CANVAS_W,
           height: CANVAS_H,
           mimeType: 'image/png',
-          pixelRatio: 1
+          pixelRatio: exportPixelRatio || 1,
+          imageSmoothingEnabled: true,
+          imageSmoothingQuality: 'high'
         });
         previewImage.src = exportedDataUrl;
         loadingOverlay.classList.add('hidden');
         showScreen('preview');
       } catch (err) {
         console.error('Export failed:', err);
-        alert('Generation failed. Please try again.');
+        alert('Could not generate preview. Please try again.');
         loadingOverlay.classList.add('hidden');
       }
     }, 150);
